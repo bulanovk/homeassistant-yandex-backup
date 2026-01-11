@@ -1,7 +1,8 @@
 # Yandex Disk Backup Provider for Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge][![](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/custom-components/hacs)
 [![CI](https://github.com/bulanovk/homeassistant-yandex-backup/actions/workflows/ci.yaml/badge.svg)](https://github.com/bulanovk/homeassistant-yandex-backup/actions/workflows/ci.yaml)
+[![Release](https://img.shields.io/github/v/release/bulanovk/homeassistant-yandex-backup?style=flat-square)](https://github.com/bulanovk/homeassistant-yandex-backup/releases)
 
 A Home Assistant custom integration that provides Yandex Disk as a backup storage provider.
 
