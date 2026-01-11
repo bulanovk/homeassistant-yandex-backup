@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Yandex Disk",
+        "description": "Enter your Yandex Disk OAuth token to enable backup integration.\n\nTo get your OAuth token:\n1. Visit https://oauth.yandex.com/authorize?response_type=token&client_id=<YOUR_APP_ID>\n2. Authorize the application\n3. Copy the access_token from the redirect URL\n4. Paste it below",
+        "data": {
+          "token": "OAuth Token",
+          "backup_folder": "Backup Folder (optional)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Yandex Disk",
+        "description": "Your Yandex Disk OAuth token is invalid or has expired. Please enter a new token."
+      }
+    },
+    "error": {
+      "invalid_token": "Invalid OAuth token. Please check and try again.",
+      "cannot_connect": "Cannot connect to Yandex Disk. Please try again.",
+      "unknown": "An unknown error occurred. Please try again."
+    },
+    "abort": {
+      "already_configured": "This Yandex Disk account is already configured.",
+      "reauth_successful": "Reauthentication successful"
+    }
+  },
+  "title": "Yandex Disk Backup"
+}

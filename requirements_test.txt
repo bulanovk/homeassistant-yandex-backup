@@ -1,0 +1,15 @@
+-r requirements.txt
+# Test dependencies for ha-yandex-location (Python 3.13 compatible)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+securetar>=2024.1.0
+# Note: pytest-homeassistant-custom-component removed due to Windows compatibility issues
+# with pytest-socket. Standard pytest-asyncio is sufficient for testing.
+
+
+# Code quality tools (latest versions)
+black>=24.1.0
+mypy>=1.8.0
+pylint>=3.0.3
+
