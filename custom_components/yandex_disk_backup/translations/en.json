@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect Yandex Disk",
-        "description": "Enter your Yandex Disk OAuth token to enable backup integration.\n\nTo get your OAuth token:\n1. Visit https://oauth.yandex.com/authorize?response_type=token&client_id=<YOUR_APP_ID>\n2. Authorize the application\n3. Copy the access_token from the redirect URL\n4. Paste it below",
+        "description": "Enter your Yandex Disk OAuth token to enable backup integration.\n\nTo get your OAuth token:\n1. Visit https://oauth.yandex.com/authorize?response_type=token&client_id=&lt;YOUR_APP_ID&gt;\n2. Authorize the application\n3. Copy the access_token from the redirect URL\n4. Paste it below",
         "data": {
           "token": "OAuth Token",
           "backup_folder": "Backup Folder (optional)"
