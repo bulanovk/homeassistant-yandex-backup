@@ -1,6 +1,6 @@
 # Yandex Disk Backup Provider for Home Assistant
 
-[![hacs_badge][![](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/custom-components/hacs)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/custom-components/hacs)
 [![CI](https://github.com/bulanovk/homeassistant-yandex-backup/actions/workflows/ci.yaml/badge.svg)](https://github.com/bulanovk/homeassistant-yandex-backup/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/bulanovk/homeassistant-yandex-backup?style=flat-square)](https://github.com/bulanovk/homeassistant-yandex-backup/releases)
 
