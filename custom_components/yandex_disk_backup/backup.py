@@ -22,9 +22,26 @@ from homeassistant.components.backup.agent import (  # type: ignore[import-not-f
     BackupAgentError,
     BackupAgentUnreachableError,
 )
-from homeassistant.components.backup.util import (  # type: ignore[import-not-found] # pylint: disable=line-too-long
-    suggested_filename,
-)
+try:
+    from homeassistant.components.backup.util import suggested_filename  # type: ignore[import-not-found]
+except ImportError:
+    # Fallback for older Home Assistant versions
+    def suggested_filename(backup: AgentBackup) -> str:  # type: ignore[misc]
+        """Generate a filename for a backup.
+
+        Args:
+            backup: The AgentBackup object
+
+        Returns:
+            A filename for the backup
+        """
+        # Use backup.name as the filename, or a timestamp-based name
+        name = backup.name
+        if not name.endswith((".tar", ".tar.gz")):
+            # Add .tar extension if not present
+            name = f"{name}.tar"
+        return name
+
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -142,7 +159,7 @@ class YandexDiskBackupAgent(BackupAgent):
         """Download a backup from Yandex Disk.
 
         Args:
-            backup_id: The backup ID (filename on Yandex Disk)
+            backup_id: The HA backup ID (UUID)
             **kwargs: Additional parameters
 
         Returns:
@@ -153,7 +170,13 @@ class YandexDiskBackupAgent(BackupAgent):
             BackupAgentUnreachableError: If Yandex Disk is unreachable
         """
         try:
-            remote_path = f"{self._backup_folder}/{backup_id}"
+            # Resolve HA backup_id to actual filename on Yandex Disk
+            filename = await self._resolve_filename(backup_id)
+            if filename is None:
+                _LOGGER.error("Backup not found: %s", backup_id)
+                raise BackupAgentError(f"Backup {backup_id} not found")
+
+            remote_path = f"{self._backup_folder}/{filename}"
             client = await self._get_client()
             download_url = await client.get_download_link(remote_path)
             # Return the async generator directly (don't yield from this function)
@@ -352,21 +375,27 @@ class YandexDiskBackupAgent(BackupAgent):
         """Delete a backup from Yandex Disk.
 
         Args:
-            backup_id: The backup ID to delete
+            backup_id: The HA backup ID (UUID) to delete
             **kwargs: Additional parameters
 
         Raises:
             BackupAgentError: If deletion fails
             BackupAgentUnreachableError: If Yandex Disk is unreachable
         """
-        remote_path = f"{self._backup_folder}/{backup_id}"
+        # Resolve HA backup_id to actual filename on Yandex Disk
+        filename = await self._resolve_filename(backup_id)
+        if filename is None:
+            _LOGGER.warning("Backup not found for deletion: %s", backup_id)
+            raise BackupAgentError(f"Backup {backup_id} not found")
+
+        remote_path = f"{self._backup_folder}/{filename}"
         metadata_path = self._get_metadata_path(remote_path)
 
         try:
             client = await self._get_client()
             # Move to trash first (safer than permanent delete)
             await client.remove(remote_path, permanently=False)
-            _LOGGER.info("Deleted backup: %s", backup_id)
+            _LOGGER.info("Deleted backup: %s (filename: %s)", backup_id, filename)
         except NotFoundError:
             # Already deleted - not an error
             _LOGGER.debug("Backup not found, may already be deleted: %s", backup_id)
@@ -460,15 +489,12 @@ class YandexDiskBackupAgent(BackupAgent):
                     metadata_dict = await self._load_metadata(client, backup_path)
 
                     if metadata_dict:
-                        # Use metadata from sidecar file
-                        # IMPORTANT: Override backup_id to be the filename on disk
-                        # The original backup_id in metadata is HA's internal ID which
-                        # won't match our storage filename
-                        metadata_dict["backup_id"] = item.name
+                        # Use metadata from sidecar file as-is, including HA's backup_id
                         backups.append(AgentBackup.from_dict(metadata_dict))
                         _LOGGER.debug(
-                            "Loaded backup from metadata: %s (backup_id=%s)",
+                            "Loaded backup from metadata: %s (backup_id=%s, filename=%s)",
                             metadata_dict.get("name", item.name),
+                            metadata_dict.get("backup_id"),
                             item.name,
                         )
                     else:
@@ -539,7 +565,7 @@ class YandexDiskBackupAgent(BackupAgent):
         """Get backup metadata from Yandex Disk.
 
         Args:
-            backup_id: The backup ID
+            backup_id: The HA backup ID (UUID)
             **kwargs: Additional parameters
 
         Returns:
@@ -549,7 +575,12 @@ class YandexDiskBackupAgent(BackupAgent):
             BackupAgentError: If backup not found or get fails
             BackupAgentUnreachableError: If Yandex Disk is unreachable
         """
-        remote_path = f"{self._backup_folder}/{backup_id}"
+        # Resolve HA backup_id to actual filename on Yandex Disk
+        filename = await self._resolve_filename(backup_id)
+        if filename is None:
+            raise BackupAgentError(f"Backup {backup_id} not found")
+
+        remote_path = f"{self._backup_folder}/{filename}"
 
         try:
             client = await self._get_client()
@@ -558,11 +589,7 @@ class YandexDiskBackupAgent(BackupAgent):
             metadata_dict = await self._load_metadata(client, remote_path)
 
             if metadata_dict:
-                # Use metadata from sidecar file
-                # IMPORTANT: Override backup_id to be the filename on disk (the backup_id parameter)
-                # The original backup_id in metadata is HA's internal ID which
-                # won't match our storage filename
-                metadata_dict["backup_id"] = backup_id
+                # Use metadata from sidecar file as-is, including HA's backup_id
                 return AgentBackup.from_dict(metadata_dict)
 
             # Fallback to file metadata for old backups without sidecar
@@ -694,6 +721,48 @@ class YandexDiskBackupAgent(BackupAgent):
             except YaDiskError:
                 _LOGGER.error("Failed to create backup folder: %s", err)
                 raise BackupAgentError("Cannot create backup folder") from err
+
+    async def _resolve_filename(self, backup_id: str) -> str | None:
+        """Resolve backup_id (HA UUID) to filename on Yandex Disk.
+
+        Args:
+            backup_id: The HA backup ID (UUID) to resolve
+
+        Returns:
+            The filename on Yandex Disk, or None if not found
+        """
+        try:
+            client = await self._get_client()
+            async for item in client.listdir(self._backup_folder):  # type: ignore[attr-defined]
+                # Skip non-files and metadata files
+                if getattr(item, "type", None) != "file":
+                    continue
+                name = getattr(item, "name", None)
+                if name is None or name.endswith(".metadata.json"):
+                    continue
+
+                # Check if this is a backup file
+                if not self._is_backup_file(name):
+                    continue
+
+                # Load metadata from sidecar to check backup_id
+                backup_path = f"{self._backup_folder}/{name}"
+                metadata_dict = await self._load_metadata(client, backup_path)
+                if metadata_dict and metadata_dict.get("backup_id") == backup_id:
+                    _LOGGER.debug(
+                        "Resolved backup_id %s to filename %s", backup_id, name
+                    )
+                    return name
+
+            _LOGGER.warning("Could not resolve backup_id %s to filename", backup_id)
+            return None
+
+        except NotFoundError:
+            _LOGGER.debug("Backup folder not found while resolving backup_id")
+            return None
+        except YaDiskError as err:
+            _LOGGER.error("Error resolving backup_id %s: %s", backup_id, err)
+            return None
 
     async def _get_disk_info_cached(self) -> dict[str, Any]:
         """Get disk info with caching to reduce API calls.

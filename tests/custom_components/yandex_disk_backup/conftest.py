@@ -48,8 +48,6 @@ if const_path.exists() and "custom_components.yandex_disk_backup.const" not in s
     module = importlib.util.module_from_spec(spec)
     sys.modules["custom_components.yandex_disk_backup.const"] = module
     spec.loader.exec_module(module)
-    # Also set it as an attribute of the parent module
-    setattr(sys.modules["custom_components.yandex_disk_backup"], "const", module)
 
 # Load backup.py (depends on const)
 backup_path = project_root / "custom_components" / "yandex_disk_backup" / "backup.py"
@@ -60,8 +58,6 @@ if backup_path.exists() and "custom_components.yandex_disk_backup.backup" not in
     module = importlib.util.module_from_spec(spec)
     sys.modules["custom_components.yandex_disk_backup.backup"] = module
     spec.loader.exec_module(module)
-    # Also set it as an attribute of the parent module
-    setattr(sys.modules["custom_components.yandex_disk_backup"], "backup", module)
 
 # Load config_flow.py (depends on const)
 config_flow_path = project_root / "custom_components" / "yandex_disk_backup" / "config_flow.py"
@@ -72,8 +68,27 @@ if config_flow_path.exists() and "custom_components.yandex_disk_backup.config_fl
     module = importlib.util.module_from_spec(spec)
     sys.modules["custom_components.yandex_disk_backup.config_flow"] = module
     spec.loader.exec_module(module)
-    # Also set it as an attribute of the parent module
-    setattr(sys.modules["custom_components.yandex_disk_backup"], "config_flow", module)
+
+# Load __init__.py (depends on backup)
+init_path = project_root / "custom_components" / "yandex_disk_backup" / "__init__.py"
+if init_path.exists():
+    spec = importlib.util.spec_from_file_location(
+        "custom_components.yandex_disk_backup", init_path
+    )
+    # Create or re-create the parent module
+    parent_module = importlib.util.module_from_spec(spec)
+    sys.modules["custom_components.yandex_disk_backup"] = parent_module
+    spec.loader.exec_module(parent_module)
+
+# Load diagnostics.py (depends on const)
+diagnostics_path = project_root / "custom_components" / "yandex_disk_backup" / "diagnostics.py"
+if diagnostics_path.exists() and "custom_components.yandex_disk_backup.diagnostics" not in sys.modules:
+    spec = importlib.util.spec_from_file_location(
+        "custom_components.yandex_disk_backup.diagnostics", diagnostics_path
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["custom_components.yandex_disk_backup.diagnostics"] = module
+    spec.loader.exec_module(module)
 
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
@@ -190,6 +205,24 @@ def mock_yadisk_client():
     client.mkdir = AsyncMock()
 
     return client
+
+
+@pytest.fixture
+def mock_backup_metadata():
+    """Create mock backup metadata for sidecar files."""
+    return {
+        "backup_id": "abc123def456",  # HA's internal backup ID
+        "name": "core.2026-01-08.tar",
+        "size": 1024 * 1024,
+        "date": datetime.now().isoformat(),
+        "addons": [],
+        "database_included": False,
+        "extra_metadata": {},
+        "folders": [],
+        "homeassistant_included": True,
+        "homeassistant_version": "2024.1.0",
+        "protected": False,
+    }
 
 
 @pytest.fixture(autouse=True)
