@@ -5,3 +5,4 @@ venv/**
 htmlcov
 nul
 .mypy_cache
+coverage.json
