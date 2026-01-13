@@ -22,6 +22,7 @@ from homeassistant.components.backup.agent import (  # type: ignore[import-not-f
     BackupAgentError,
     BackupAgentUnreachableError,
 )
+
 try:
     from homeassistant.components.backup.util import suggested_filename  # type: ignore[import-not-found]
 except ImportError:
@@ -41,6 +42,7 @@ except ImportError:
             # Add .tar extension if not present
             name = f"{name}.tar"
         return name
+
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
