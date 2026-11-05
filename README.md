@@ -127,6 +127,38 @@ The integration properly distinguishes between automatic and manual backups:
 
 Both types are displayed correctly in the Home Assistant backup UI with their respective labels.
 
+## Uninstallation
+
+Remove the configured integration instances **before** uninstalling its files. Removing the HACS download or the component directory alone does not remove Home Assistant's configuration entries.
+
+1. Go to **Settings > System > Backups** and deselect **Yandex Disk** as a location for automatic backups. Select another location if you want automatic backups to continue elsewhere.
+2. Go to **Settings > Devices & Services** and open **Yandex Disk Backup**.
+3. Open the **three-dot menu next to the configured instance**, select **Delete**, and confirm. Repeat for any other configured instances. Use the instance menu, not the configuration wizard.
+4. Uninstall the integration through HACS, or, for a manual installation, remove only the `yandex_disk_backup` directory inside your Home Assistant configuration directory's `custom_components` folder (usually `/config/custom_components/yandex_disk_backup`).
+5. Restart Home Assistant and verify that Yandex Disk is no longer offered as a backup location.
+
+Uninstalling the integration does **not** delete archives or `.metadata.json` files from Yandex Disk. If the OAuth token is no longer needed by any other application or Home Assistant instance, revoke its access in Yandex as well.
+
+### If Files Were Already Removed
+
+If the integration still appears or opening its setup wizard shows `Invalid handler specified`, its configuration entry may remain after the component files were removed:
+
+1. Temporarily reinstall the component through HACS or restore its files manually.
+2. Restart Home Assistant. **Do not add a new integration instance**; use the existing entry.
+3. Follow the uninstallation steps above, deleting the configured instance before removing the files again.
+
+Do not manually edit Home Assistant's `.storage` files as a first troubleshooting step.
+
+If these steps do not help, report the following in an issue:
+
+- Home Assistant Core version, integration version (before removal), and installation method (HACS or manual).
+- The exact removal steps already performed and whether Home Assistant was restarted afterward.
+- The step that fails, the full error message, and whether the instance menu offers **Delete**.
+- Whether Yandex Disk remains under **Devices & Services**, in backup locations, or both.
+- Relevant logs from **Settings > System > Logs**, including the traceback if available, and a screenshot of the remaining entry and its menu.
+
+**Remove OAuth tokens and other sensitive information from logs and screenshots before sharing them.**
+
 ## Architecture
 
 ```
