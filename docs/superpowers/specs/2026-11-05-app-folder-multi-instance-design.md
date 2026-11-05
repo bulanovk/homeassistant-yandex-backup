@@ -146,7 +146,55 @@ Do not claim the new scope combination or namespace support is production-tested
 
 ## Migration and rollout
 
-This is opt-in for existing installations and recommended for new ones. Existing archives and sidecars remain in place. A user switching modes creates a new entry and keeps the old location available until they have verified the new backup and restore path. Any manual copying must preserve both archive and sidecar; automated migration and deduplication are out of scope.
+This is opt-in for existing installations and recommended for new ones. A migration guide for existing instances with full-Disk permissions is a required deliverable of the feature. Automated migration and deduplication remain out of scope. The following is the required manual migration procedure; validate it in live acceptance before publishing it as a tested walkthrough.
+
+### 1. Inventory and prepare
+
+- Record each HA instance's current OAuth application, account, source folder, and intended unique destination subfolder. Existing instances may use different OAuth applications; the target design uses one selected application. Do not assume that their existing `app:/` namespaces are the same.
+- Preserve the current working configuration and access to its token securely. Never put tokens into migration logs or the mapping document. Keep backup encryption keys/emergency kits independently available; moving an encrypted archive does not remove the need for its key.
+- Identify which backups belong to each instance before copying. If multiple instances already share one source folder, do not guess ownership or split files by filename alone: use known backup metadata and the user's inventory. Leave ambiguous backups untouched until ownership is established.
+- Pause scheduled backups and retention/deletion affecting both migration locations on participating instances, and wait for in-flight uploads to finish. Avoid copying an archive while its sidecar is still being written. Keep the pause window short and explicit.
+- Check sufficient space for both source and copied destination data. All folders share the account quota; this is a copy-first procedure, not a space-saving move.
+
+### 2. Prepare the restricted destination
+
+- Select the shared target OAuth application and authorize a new token requesting only `cloud_api:disk.app_folder` and `cloud_api:disk.info`. A currently broad token must not be reused as proof of reduced privileges.
+- If the same application must temporarily support legacy broad tokens, use an explicit limited-scope authorization request for the new token and verify the resulting permissions. Exact issuance and revocation behavior must be established in live acceptance; do not remove permissions from the application globally or revoke grants while legacy instances still depend on them. If safe coexistence cannot be demonstrated, use a new shared target application for all migrated instances, keeping the old application(s) intact until cutover completes. This remains one shared target application, not one target application per instance.
+- Add a new integration entry in application-folder mode using the new token and the chosen instance folder. Keep the old entry available for rollback, but do not select the new location for scheduled backups yet. Setup creates/accesses the destination folder.
+- Verify that the new entry can coexist with the old entry. The current token-prefix identity scheme can cause duplicate-entry conflicts; a collision is an implementation/acceptance blocker to resolve safely, not a reason to edit HA storage files manually or remove a working entry prematurely.
+
+### 3. Copy existing backups without changing their identity
+
+- Through the authenticated Yandex Disk user interface, copy each instance's archives and associated metadata files from its recorded source folder into its prepared application subfolder. The user can access both locations; the restricted integration token cannot read the old ordinary folder and must not be used to perform this cross-boundary copy.
+- Locate the actual destination created for the selected OAuth application; its displayed name can vary. Do not create a similarly named ordinary folder and assume it is the application's folder. API-based migration tooling, if added later, must resolve `app:/` with the target application's token before acting.
+- Copy rather than move. Preserve exact filenames, archive contents, sidecar contents, backup IDs, dates, and encryption state. Use existing sidecar filenames; do not derive them with a new naming algorithm. For a legacy backup without a sidecar, preserve that absence and verify legacy retrieval explicitly; do not invent metadata.
+- Never overwrite a destination conflict silently. Skip only if archive and available sidecar are verified identical; otherwise stop for manual resolution. Do not rename one member of an archive/sidecar pair to resolve a conflict.
+- Keep a token-free checklist of copied files and compare sizes and, where available, content hashes. Counts and matching filenames alone are insufficient verification. Refresh HA's backup listing after copying; do not modify its internal storage files.
+
+### 4. Validate and cut over one instance at a time
+
+- Verify imported backup names, IDs, dates, sizes, and protection state in the destination. During coexistence, the same backup may appear at two locations; that is expected, not a reason to delete it.
+- Download at least one copied backup through the new entry and verify it against the source. Verify that encryption material is available and perform a restore test in a separate disposable HA environment where practical, never an unsolicited restore over the production instance. Test at least one backup without a sidecar if such files are being migrated; inability to retrieve it is a blocker for retiring the old location, not permission to fabricate metadata.
+- Create a new backup at the destination, verify its sidecar and download, and test trash deletion only on a disposable test backup. Confirm operations do not modify another instance's subfolder.
+- Select only the new entry for that instance's future scheduled backups and configure retention for the intended destination. Re-enable scheduling, run a scheduled backup, and verify it reaches the correct subfolder. Ensure the old entry is not still selected for automatic uploads.
+- Repeat for the remaining instances using distinct subfolders. Do not grant application-folder tokens broad read/write permissions to work around an error.
+
+### 5. Retire broad access and clean up separately
+
+- After each instance's cutover succeeds, disable its old integration entry where supported, or remove it once its settings have been recorded securely. Confirm this does not delete remote backups. Keep original backup data until the user's retention/verification window has elapsed; this design does not select an automatic deletion deadline.
+- Revoke the old broad credentials only after every consumer of those credentials or the associated application grant has migrated. Inventory shared use first: do not assume revoking one authorization leaves other tokens or instances unaffected. Confirm revocation behavior and verify that the new restricted tokens still function afterwards.
+- Updating the OAuth application's configured permission list alone is not proof that older broad credentials are invalid. Verify old access has actually been revoked and verify the new token cannot access ordinary folders outside `app:/`, using dedicated test files.
+- Source cleanup is a separate, explicit user action after successful verification, not an automatic part of setup. Account for trash usage when planning space; moving files to trash may not immediately reclaim quota.
+
+### Rollback
+
+Before retiring the old credentials, stop new-location scheduling, restore the old entry as the selected backup location, and resume scheduling there. Original archives remain intact because migration copied rather than moved them. Backups created only after cutover remain at the destination; preserve and inventory them rather than silently assuming the source is current. Keep the new entry available for their retrieval if necessary.
+
+After old credentials are revoked, rollback to ordinary-folder mode requires a fresh authorization with suitable broad scopes. Do not promise immediate rollback using a revoked token. Never delete either location as part of rollback or copy new-only backups back without checking conflicts and preserving their sidecars.
+
+### Migration acceptance gates
+
+Before releasing the guide, exercise: an existing broad-token installation; multiple source instances sharing one target OAuth application; token coexistence and revocation; exact archive/sidecar preservation; encrypted backups; legacy files without sidecars; interrupted/repeated copies and conflicts; rollback before and after revocation; quota pressure; and restoration of scheduling/retention. If a legacy compatibility issue blocks retrieval, document it as a blocker and retain the original working entry until resolved.
 
 Release documentation must explain the security benefit relative to full-Disk access, the shared-folder limitation, the permission change, and the requirement for a token without broad file scopes.
 
