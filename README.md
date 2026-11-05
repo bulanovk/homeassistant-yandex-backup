@@ -43,15 +43,64 @@ A Home Assistant custom integration that provides Yandex Disk as a backup storag
 
 ## Configuration
 
+### Required OAuth Permissions
+
+The current integration requires all three Yandex Disk permissions below:
+
+| Permission | Scope | Purpose |
+|------------|-------|---------|
+| Access to Disk information | `cloud_api:disk.info` | Validate the token and check available storage before uploading |
+| Read the entire Disk | `cloud_api:disk.read` | List backups, read metadata, and download archives |
+| Write anywhere on Disk | `cloud_api:disk.write` | Create the backup folder, upload archives and metadata, and move deleted backups to trash |
+
+**Access to the application folder (`cloud_api:disk.app_folder`) is not required and is not sufficient for the default configuration.** The integration uses a configurable regular folder on Yandex Disk (default: `/Home Assistant Backups`), rather than the special application folder (`app:/`). No Yandex ID profile or email permissions are needed.
+
+> **Security:** Read and write permissions apply to the entire Disk. The backup folder setting controls where the integration operates, but does not restrict the token's permissions. Keep your token private and never include it in issues, logs, or screenshots. Consider using a separate Yandex account to isolate backups from personal files.
+
+### Creating an OAuth Application
+
+1. Sign in to the Yandex account whose Disk will store your backups.
+2. Open the [Yandex OAuth application registration page](https://oauth.yandex.ru/client/new/).
+3. If prompted to choose an application type, select **For API access or debugging**.
+4. Enter an application name, such as `Home Assistant Backups`, and a contact email address.
+5. Under data access, select the **three Yandex Disk permissions listed above**.
+6. Create the application and copy its **ClientID**.
+
+For this application type, Yandex uses `https://oauth.yandex.ru/verification_code` as the fixed redirect URI. You do not need to enter your Home Assistant URL.
+
 ### Getting Your OAuth Token
 
-1. Visit the Yandex OAuth authorization page:
+1. Open the following URL, replacing `YOUR_CLIENT_ID` with your application's ClientID:
+   ```text
+   https://oauth.yandex.ru/authorize?response_type=token&client_id=YOUR_CLIENT_ID
    ```
-   https://oauth.yandex.com/authorize?response_type=token&client_id=<YOUR_APP_ID>
-   ```
-2. Authorize the application
-3. Copy the `access_token` from the redirect URL
-4. Paste it in the integration configuration form
+2. Make sure you are signed in to the account where you want to store backups, then approve the requested permissions.
+3. Copy the token shown after authorization. If it appears in the redirect URL as `access_token=...`, copy only the parameter value, without `access_token=` or any subsequent parameters after `&`.
+
+If you add permissions after obtaining a token, repeat authorization to obtain a token with the required permissions.
+
+### Adding the Integration
+
+After installing the integration and restarting Home Assistant:
+
+1. Navigate to **Settings > Devices & Services > Add Integration**.
+2. Search for **Yandex Disk Backup**.
+3. Paste the token into **OAuth Token**, without an `OAuth ` prefix.
+4. Leave **Backup Folder** set to `/Home Assistant Backups`, or specify another regular Disk folder. The integration creates the folder if needed; use the default path for the simplest initial setup.
+5. Complete the configuration.
+
+The integration accepts an existing token; it does not obtain one automatically. You do not need to enter a ClientID or Client secret in Home Assistant.
+
+### Verifying Your Setup
+
+1. Navigate to **Settings > System > Backups**.
+2. Create a test backup and select **Yandex Disk** as the backup location.
+3. Check that the archive and its accompanying `.metadata.json` file appear in the backup folder. Keep the metadata file alongside the archive; the integration uses it to identify and describe the backup.
+4. Check that you can download the test backup through Home Assistant.
+
+Successfully adding the integration only verifies access to Disk information; it does not verify all read and write operations. If listing or downloading backups fails, check `cloud_api:disk.read`. If creating the folder, uploading, or deleting backups fails, check `cloud_api:disk.write`, the folder path, and available storage. If token validation fails, check the token, `cloud_api:disk.info`, and network connectivity to Yandex, since connection errors can also appear as token validation errors.
+
+For more information, see Yandex's documentation on [registering an application for API access](https://yandex.ru/dev/id/doc/ru/register-api) and [Disk API permissions and token acquisition](https://yandex.ru/dev/disk/api/concepts/quickstart.html).
 
 ### Configuration Options
 
