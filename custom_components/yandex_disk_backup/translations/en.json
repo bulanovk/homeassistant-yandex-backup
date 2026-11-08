@@ -3,25 +3,90 @@
     "step": {
       "user": {
         "title": "Connect Yandex Disk",
-        "description": "Enter your Yandex Disk OAuth token to enable backup integration.\n\nTo get your OAuth token:\n1. Visit https://oauth.yandex.com/authorize?response_type=token&client_id=&lt;YOUR_APP_ID&gt;\n2. Authorize the application\n3. Copy the access_token from the redirect URL\n4. Paste it below",
+        "description": "Choose where backups are stored.",
         "data": {
-          "token": "OAuth Token",
-          "backup_folder": "Backup Folder (optional)"
+          "storage_mode": "Storage mode"
+        },
+        "data_description": {
+          "storage_mode": "App folder (recommended): backups are stored in a separate app folder on Yandex Disk, and the integration cannot see other files. Disk folder (legacy): backups go to a normal folder on the whole disk and need a token with full disk access that you create yourself."
+        }
+      },
+      "manual_token": {
+        "title": "Enter OAuth token",
+        "description": "Paste the OAuth token. Get it via the link in the hint.",
+        "data": {
+          "token": "OAuth token"
+        },
+        "data_description": {
+          "token": "Token from https://oauth.yandex.ru/authorize?response_type=token&client_id=YOUR_APP_ID"
+        }
+      },
+      "folder": {
+        "title": "Backup location",
+        "description": "Backups are stored in this folder. Each Home Assistant instance needs its own folder name.",
+        "data": {
+          "instance_folder": "Instance folder name",
+          "backup_folder": "Backup folder"
+        },
+        "data_description": {
+          "instance_folder": "Folder inside the app folder for this instance. It is created if missing.",
+          "backup_folder": "Folder on your Disk, created if missing."
         }
       },
       "reauth_confirm": {
         "title": "Reauthenticate Yandex Disk",
-        "description": "Your Yandex Disk OAuth token is invalid or has expired. Please enter a new token."
+        "description": "Your Yandex Disk OAuth token is invalid or has expired. Please enter a new token.",
+        "data": {
+          "token": "OAuth token"
+        },
+        "data_description": {
+          "token": "New OAuth token."
+        }
+      },
+      "reauth_oauth": {
+        "title": "Reauthenticate Yandex Disk",
+        "description": "Your Yandex Disk authorization has expired. Submit to sign in to Yandex again."
+      },
+      "pick_implementation": {
+        "title": "Pick authentication method"
+      },
+      "reconfigure": {
+        "title": "Change storage mode",
+        "description": "Choose the new storage mode. You will authorize Yandex Disk again, and the stored token is replaced."
+      },
+      "migration_hint": {
+        "title": "Move existing backups",
+        "description": "The storage mode changed. Backups in the old location ({old_path}) are not moved automatically and will not be listed anymore. To keep them, open the Yandex Disk web interface, move the files from {old_path} to {new_path}, and move each backup file together with its .metadata.json file."
       }
     },
     "error": {
       "invalid_token": "Invalid OAuth token. Please check and try again.",
       "cannot_connect": "Cannot connect to Yandex Disk. Please try again.",
-      "unknown": "An unknown error occurred. Please try again."
+      "unknown": "An unknown error occurred. Please try again.",
+      "invalid_instance_folder": "Invalid folder name. Avoid empty names, leading or trailing spaces and slashes, dots as path segments, and the characters \\ : % ? #.",
+      "folder_is_file": "A file with this name already exists on Yandex Disk where the folder should be."
     },
     "abort": {
       "already_configured": "This Yandex Disk account is already configured.",
-      "reauth_successful": "Reauthentication successful"
+      "reauth_successful": "Reauthentication successful",
+      "wrong_account": "The token belongs to a different Yandex account or backup location. Reauthenticate with the original account.",
+      "cannot_connect": "Cannot connect to Yandex Disk. Please try again.",
+      "missing_configuration": "The Yandex sign-in is not available. Restart Home Assistant and try again.",
+      "authorize_url_timeout": "Timeout generating the authorization URL.",
+      "no_url_available": "No Home Assistant URL is available. See {docs_url}.",
+      "oauth_error": "Yandex returned an invalid token.",
+      "oauth_failed": "Could not get a token from Yandex.",
+      "oauth_timeout": "Timeout getting a token from Yandex.",
+      "oauth_unauthorized": "Yandex rejected the authorization.",
+      "user_rejected_authorize": "Access was not allowed: {error}"
+    }
+  },
+  "selector": {
+    "storage_mode": {
+      "options": {
+        "app_folder": "App folder (recommended)",
+        "disk_folder": "Disk folder (full access, legacy)"
+      }
     }
   },
   "title": "Yandex Disk Backup"

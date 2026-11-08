@@ -78,7 +78,9 @@ async def test_diagnostics_storage_info_error(hass: HomeAssistant, backup_agent)
 
     # Mock _get_disk_info_cached to raise an exception
     with patch.object(
-        backup_agent, "_get_disk_info_cached", new=AsyncMock(side_effect=YaDiskError("API Error"))
+        backup_agent,
+        "_get_disk_info_cached",
+        new=AsyncMock(side_effect=YaDiskError("API Error")),
     ):
         diagnostics = await async_get_config_entry_diagnostics(hass, config_entry)
 
@@ -87,7 +89,9 @@ async def test_diagnostics_storage_info_error(hass: HomeAssistant, backup_agent)
 
 
 @pytest.mark.asyncio
-async def test_diagnostics_with_backup_count(hass: HomeAssistant, backup_agent, mock_yadisk_client):
+async def test_diagnostics_with_backup_count(
+    hass: HomeAssistant, backup_agent, mock_yadisk_client
+):
     """Test diagnostics with backup count information."""
     from datetime import datetime
     from unittest.mock import Mock
@@ -148,7 +152,9 @@ async def test_diagnostics_backup_count_error(hass: HomeAssistant, backup_agent)
 
     # Mock async_list_backups to raise an exception
     with patch.object(
-        backup_agent, "async_list_backups", new=AsyncMock(side_effect=YaDiskError("API Error"))
+        backup_agent,
+        "async_list_backups",
+        new=AsyncMock(side_effect=YaDiskError("API Error")),
     ):
         diagnostics = await async_get_config_entry_diagnostics(hass, config_entry)
 
@@ -175,3 +181,47 @@ async def test_diagnostics_token_redaction(hass: HomeAssistant, backup_agent):
     assert diagnostics["config"][CONF_TOKEN] != "secret_oauth_token_abc123"
     assert "REDACTED" in str(diagnostics["config"][CONF_TOKEN])
     assert "secret" not in str(diagnostics["config"][CONF_TOKEN])
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_new_fields(hass: HomeAssistant):
+    """App-folder entries expose mode, path and expiry; a leftover secret is redacted."""
+    config_entry = Mock(spec=ConfigEntry)
+    config_entry.entry_id = "oauth_entry"
+    config_entry.data = {
+        CONF_TOKEN: "access-secret",
+        "refresh_token": "refresh-secret",
+        "client_secret": "client-secret",
+        "storage_mode": "app_folder",
+        "instance_folder": "home",
+        "auth_method": "oauth",
+        "expires_at": 1_767_225_600.0,
+    }
+    hass.data.setdefault(DOMAIN, {})
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, config_entry)
+
+    config = diagnostics["config"]
+    assert config["client_secret"] == "**REDACTED**"
+    assert config["refresh_token"] == "**REDACTED**"
+    assert config[CONF_TOKEN] == "**REDACTED**"
+    assert diagnostics["storage_mode"] == "app_folder"
+    assert diagnostics["auth_method"] == "oauth"
+    assert diagnostics["base_path"] == "app:/home"
+    assert diagnostics["token_expires_at"] == "2026-01-01T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_legacy_entry_defaults(hass: HomeAssistant):
+    """Legacy entries report disk_folder/manual and their configured folder."""
+    config_entry = Mock(spec=ConfigEntry)
+    config_entry.entry_id = "legacy"
+    config_entry.data = {CONF_TOKEN: "t", CONF_BACKUP_FOLDER: "/Old"}
+    hass.data.setdefault(DOMAIN, {})
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, config_entry)
+
+    assert diagnostics["storage_mode"] == "disk_folder"
+    assert diagnostics["auth_method"] == "manual"
+    assert diagnostics["base_path"] == "/Old"
+    assert diagnostics["token_expires_at"] is None

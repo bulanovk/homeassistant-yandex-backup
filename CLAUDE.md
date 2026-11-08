@@ -20,56 +20,56 @@
 - `yadisk>=3.4.0` - Official Python async client for Yandex Disk API
 
 ### Home Assistant Requirements
-- Minimum HA Version: 2023.8.0 (backup agent platform support)
-- Target HA Versions: 2024.x - 2025.x
-- Tested with: homeassistant==2025.12.4
-- Python: 3.13+ (recommended), 3.12+ supported
+- Minimum HA Version: 2026.3.0 (local brand images in brand/)
+- Target HA Versions: 2026.3+
+- Tested with: homeassistant==2026.3.4
+- Python: 3.14.2+ (required by Home Assistant 2026.3.4)
 
-## Implementation Plan Location
+## Design and Plans
 
-The detailed implementation plan is saved at:
-`C:\Users\bulan\.claude\plans\humble-crunching-dahl.md`
-
-This plan contains:
-1. Architectural Overview
-2. Integration Classification (domain: `yadisk`, Backup Provider)
-3. Authentication & Credential Handling (OAuth token-based)
-4. Async Design (yadisk.AsyncClient, no executor needed)
-5. Backup Lifecycle (all 5 BackupAgent methods)
-6. Configuration Flow & UX
-7. Failure Handling & Resilience
-8. Testing Strategy
-9. Dependency Management
-10. Logging & Diagnostics
-11. Risks & Reviewer Concerns
+- Current design: `docs/superpowers/specs/2026-11-05-app-folder-multi-instance-design.md` (app-folder storage, PKCE sign-in, manual token for disk folder, migration plan, release gates).
+- The original 2025 implementation plan is a local file (`C:\Users\bulan\.claude\plans\humble-crunching-dahl.md`). It is historical and not kept in the repository.
 
 ## File Structure
 
 ```
-d:/projects/ha-yandex-location/
+./
 ├── custom_components/
 │   └── yandex_disk_backup/
-│       ├── __init__.py         # Component setup, agent registration
+│       ├── __init__.py         # Component setup, token refresh at setup, agent registration
 │       ├── backup.py           # YandexDiskBackupAgent (core logic)
-│       ├── config_flow.py      # OAuth token validation
-│       ├── const.py            # Constants (DOMAIN, config keys)
-│       ├── diagnostics.py      # Diagnostic endpoint
+│       ├── config_flow.py      # Storage mode, PKCE sign-in, manual token, folder, reconfigure, reauth
+│       ├── const.py            # Constants (DOMAIN, config keys, scopes, OAuth URLs)
+│       ├── diagnostics.py      # Diagnostic endpoint (secrets redacted)
 │       ├── manifest.json       # Component metadata, deps
+│       ├── oauth.py            # Yandex OAuth client (token refresh)
+│       ├── paths.py            # Instance folder validation, storage base path, filename join
+│       ├── storage.py          # Recursive folder creation
+│       ├── token_manager.py    # Token refresh before expiry, saved to the config entry
+│       ├── brand/              # Local integration icons (icon.png, icon@2x.png)
 │       ├── strings.json        # UI strings
 │       └── translations/
-│           └── en.json         # English translations
+│           ├── en.json         # English translations
+│           └── ru.json         # Russian translations
 ├── tests/
 │   ├── conftest.py             # Windows compatibility mocks
 │   └── custom_components/
 │       └── yandex_disk_backup/
 │           ├── __init__.py
 │           ├── conftest.py     # Pytest fixtures
-│           ├── test_backup.py  # Backup operations tests
-│           └── test_config_flow.py # Config flow tests
+│           ├── test_backup.py
+│           ├── test_config_flow.py
+│           ├── test_diagnostics.py
+│           ├── test_init.py
+│           ├── test_oauth.py
+│           ├── test_paths.py
+│           ├── test_storage.py
+│           ├── test_strings.py
+│           └── test_token_manager.py
 ├── .github/
 │   └── workflows/
-│       ├── ci.yaml             # GitHub Actions CI (Python 3.13)
-│       └── hacs.off            # HACS validation workflow
+│       ├── ci.yaml             # GitHub Actions CI (Python 3.14)
+│       └── hacs.yaml-off       # HACS validation workflow (disabled)
 ├── requirements.txt            # Production dependencies
 ├── requirements_test.txt       # Test dependencies
 ├── README.md                   # Documentation
@@ -78,7 +78,7 @@ d:/projects/ha-yandex-location/
 
 ## Implementation Status
 
-### Completed Files (16)
+### Files
 
 1. **const.py** - Domain: "yandex_disk_backup", config keys, timeouts, defaults
 2. **manifest.json** - Dependencies: yadisk>=3.4.0, backup platform
@@ -90,11 +90,11 @@ d:/projects/ha-yandex-location/
    - async_get_backup() - metadata retrieval from sidecar or fallback to file metadata
    - _ensure_backup_folder() - creates folder if missing
    - _get_disk_info_cached() - 5-minute cache
-   - _get_client() - client creation wrapped in executor to avoid SSL blocking
+   - _get_client() - client created in executor to avoid SSL blocking; recreated when the access token changes
    - _get_metadata_path() - generates sidecar metadata file path
    - _upload_metadata() - stores backup metadata as JSON sidecar file
    - _load_metadata() - loads backup metadata from sidecar file
-4. **config_flow.py** - OAuth token validation via get_disk_info()
+4. **config_flow.py** - storage mode selection, PKCE sign-in (app folder), manual token (disk folder), folder step, reconfigure, reauth
 5. **__init__.py** - async_setup_entry, async_unload_entry, agent registration
 6. **strings.json** - UI strings for config flow
 7. **diagnostics.py** - async_get_config_entry_diagnostics with token redaction
@@ -102,21 +102,21 @@ d:/projects/ha-yandex-location/
 9. **tests/conftest.py** - Windows compatibility mocks (fcntl, resource)
 10. **tests/custom_components/yandex_disk_backup/__init__.py** - Test package marker
 11. **tests/custom_components/yandex_disk_backup/conftest.py** - Mock fixtures
-12. **tests/custom_components/yandex_disk_backup/test_backup.py** - 14 test cases
-13. **tests/custom_components/yandex_disk_backup/test_config_flow.py** - 9 test cases
+12. **tests/custom_components/yandex_disk_backup/test_backup.py** - backup operations
+13. **tests/custom_components/yandex_disk_backup/test_config_flow.py** - config flow
 14. **README.md** - Documentation
-15. **.github/workflows/ci.yaml** - CI configuration (Python 3.13)
-16. **.github/workflows/hacs.off** - HACS validation workflow
+15. **.github/workflows/ci.yaml** - CI configuration (Python 3.14)
+16. **.github/workflows/hacs.yaml-off** - HACS validation workflow (disabled)
 
 ## Key Design Decisions
 
 1. **Domain Name**: `yandex_disk_backup` (custom component, uses yadisk package)
 2. **Classification**: Backup Provider only (not storage provider)
-3. **Authentication**: OAuth token-based (not full OAuth flow)
+3. **Authentication**: App-folder storage uses PKCE sign-in with the built-in app (no client secret). Disk-folder (legacy) storage uses a manual token with full disk access.
 4. **Async Strategy**: Native yadisk.AsyncClient, with client creation in executor to avoid SSL blocking
 5. **Upload Strategy**: Uses `client.upload()` with User-Agent spoofing to bypass 128 KiB/s throttling
 6. **Download Strategy**: Uses HA's HTTP session for streaming downloads
-7. **Default Folder**: "/Home Assistant Backups"
+7. **Default Folder**: "/Home Assistant Backups" for disk-folder and legacy entries; app-folder entries use `app:/<instance folder>`
 8. **Delete Strategy**: Move to trash (permanently=False)
 9. **Chunk Size**: 4 MB (matches HA backup patterns)
 10. **Cache Duration**: 5 minutes for disk info
@@ -125,6 +125,8 @@ d:/projects/ha-yandex-location/
 13. **Metadata Storage**: Sidecar `.metadata.json` files preserve full backup metadata (name, date, extra_metadata, etc.)
 14. **Backup ID Handling**: The `backup_id` field in `AgentBackup` objects is always the Yandex Disk filename, not HA's internal backup ID. This ensures consistency between backup listings and file operations (download/delete/get).
 15. **Backward Compatibility**: Old backups without sidecar files are supported with fallback to file metadata
+16. **Storage Paths**: `paths.py` resolves one base path per entry (`app:/<instance folder>` or the legacy backup folder); every operation joins filenames onto it. `storage.py` creates missing ancestors recursively and fails with `FolderIsFileError` when a file is in the way.
+17. **Token Refresh**: `TokenManager` refreshes a token when fewer than 30 days remain, serializes refreshes with a lock, and saves the result to the config entry. `invalid_grant` starts reauthentication.
 
 ## Testing Requirements
 
@@ -161,13 +163,10 @@ mypy custom_components/yandex_disk_backup/
 pylint custom_components/yandex_disk_backup/ --errors-only
 ```
 
-## OAuth Token Acquisition
+## Authentication
 
-Users need to:
-1. Visit: `https://oauth.yandex.com/authorize?response_type=token&client_id=<APP_ID>`
-2. Authorize the application
-3. Copy `access_token` from redirect URL
-4. Paste in config flow
+- **App folder** (default): sign in to Yandex from the config flow. PKCE with the built-in app (`APP_CLIENT_ID`, no client secret); scopes `cloud_api:disk.app_folder cloud_api:disk.info`. Needs an external URL in HA.
+- **Disk folder** (legacy): manual token from the user's own app. Users visit `https://oauth.yandex.ru/authorize?response_type=token&client_id=<APP_ID>`, authorize, copy `access_token` from the redirect URL, and paste it. Scopes `cloud_api:disk.info cloud_api:disk.read cloud_api:disk.write`.
 
 ## Error Mapping
 
@@ -180,11 +179,13 @@ Users need to:
 | TooManyRequestsError | BackupAgentUnreachableError | "Too many requests. Please try again later." |
 | YaDiskError | BackupAgentUnreachableError | "Yandex Disk operation failed." |
 
+**Current behavior (verify before changing):** only the token-refresh path maps to "Authentication failed. Please reconfigure." (`TokenRefreshError`). The backup operations do not catch `UnauthorizedError`, so a 401 from a Yandex call falls into `YaDiskError` and is reported as "Cannot connect to Yandex Disk". This is unchanged from `main`.
+
 ## Anticipated Reviewer Concerns & Responses
 
 1. **Why not WebDAV?** - Yandex Disk API is more feature-rich, official library, better error handling
 2. **Backup-only?** - Follows WebDAV pattern, appropriate for storage providers
-3. **Token OAuth vs full flow?** - Simpler UX, long-lived tokens, consistent with other providers
+3. **Token OAuth vs full flow?** - App folder signs in with PKCE and the built-in app (no client secret); manual tokens remain for legacy disk-folder storage, which needs full disk access the built-in app cannot grant
 4. **What if yadisk unmaintained?** - WebDAV fallback exists, library is active, standard patterns
 5. **Event loop blocking?** - Uses native AsyncClient, all operations async/await
 6. **Test coverage?** - Comprehensive with mocks, 80%+ target, all error paths
@@ -194,7 +195,7 @@ Users need to:
 - [x] All files created
 - [x] Core implementation complete
 - [x] Test files written
-- [x] All tests pass (27/27)
+- [x] All tests pass (178)
 - [x] Code formatted (black)
 - [x] Type checking passes (mypy)
 - [x] Linting passes (pylint)
@@ -202,6 +203,17 @@ Users need to:
 - [x] Automatic/manual backup support implemented
 - [ ] Local testing with HA instance
 - [ ] Submit PR to home-assistant/core
+
+## Recent Changes (2026-11-07): App-folder storage and PKCE sign-in
+
+- **Storage modes**: `storage_mode` = `app_folder` (default for new entries; backups in `app:/<instance_folder>`, scopes `cloud_api:disk.app_folder cloud_api:disk.info`) or `disk_folder` (regular folder, scopes `cloud_api:disk.info cloud_api:disk.read cloud_api:disk.write`). Entries without `storage_mode` keep legacy behavior (`backup_folder`, default `/Home Assistant Backups`, unique_id untouched).
+- **New modules**: `paths.py` (instance folder validation, `resolve_base_path`, `join_filename`, `folder_chain`), `storage.py` (`async_ensure_folder` creates folders recursively; `FolderIsFileError` when a file occupies the path), `oauth.py` (`YandexOAuthClient` refresh only, for the built-in app; client_id in the body, no secret; error mapping to `OAuthError` subclasses), `token_manager.py` (`TokenManager` refreshes tokens when fewer than 30 days remain, serialized by a lock, persists to the config entry; `invalid_grant` starts reauth).
+- **Auth**: app-folder entries use only the built-in PKCE sign-in (`auth_method` = `oauth`); there is no manual-token option for app folder. The device-code flow was never released and is removed. `disk_folder` (full access) is labelled legacy and accepts a pasted token (`manual`) only. Entries with `auth_method` = `device` (unreleased builds) are not refreshed: setup raises `ConfigEntryAuthFailed`. On reauth, app-folder entries move to `oauth` and disk-folder entries move to `manual`.
+- **Identity**: disk-folder manual-token entries use the first 8 characters of the token (same as main); reauth does not check the account. PKCE entries use unique_id `<yandex uid>:<storage_mode>:<folder>`; reauth on them aborts with `wrong_account` if the account or folder differs. Legacy entries skip the identity check.
+- **Secrets**: `client_secret`, `refresh_token`, `token` are redacted in diagnostics. Never log them.
+- **Status**: PKCE sign-in with the built-in app, secretless token refresh, and `app:/` visibility in the Yandex Disk web UI were confirmed by manual testing on 2026-11-07. Still open: the two-instance and outside-`app:/` access checks from the spec, and the migrated location encryption/retention settings in the HA UI (release gates in `docs/superpowers/specs/2026-11-05-app-folder-multi-instance-design.md`).
+- **Reconfigure**: the migration hint appears whenever the backup location changes (mode or folder). The same location skips it, including for legacy entries.
+- **Tests**: 178 passing (`pytest tests/custom_components/yandex_disk_backup/`).
 
 ## Recent Changes (2026-01-11)
 
@@ -250,7 +262,7 @@ Users need to:
 - Updated CI configuration to use Python 3.13
 
 ### Current Test Results
-- All 27 tests passing (15 in test_backup.py, 9 in test_config_flow.py, 3 additional tests)
+- As of 2026-11-07: all 178 tests passing (`pytest tests/custom_components/yandex_disk_backup/`)
 - Code coverage meets requirements
 - Black, mypy, pylint all passing
 
@@ -258,7 +270,7 @@ Users need to:
 
 1. **Always use virtual environment** for Python operations
 2. Integration domain is `yandex_disk_backup` (custom component, uses yadisk package)
-3. Tokens stored encrypted in Config Entries
+3. Tokens are stored in the config entry. Home Assistant keeps config entries as plain JSON under `.storage/`; the integration does not encrypt them.
 4. No secrets in YAML - UI-based config only
 5. Proper async cleanup in async_close()
 6. Follows HA contribution guidelines
@@ -266,7 +278,7 @@ Users need to:
 ## Development Environment
 
 - **OS**: Windows 11
-- **Python**: 3.13 (primary), 3.12+ supported
+- **Python**: 3.14 (CI and Home Assistant 2026.3.4). The 2026-11-07 changes were verified locally on Python 3.13.14.
 - **Virtual Environment**: venv (activated via `venv\Scripts\activate`)
 
 ### Windows Compatibility Notes
@@ -278,9 +290,8 @@ The test suite includes Windows compatibility fixes in `tests/conftest.py`:
 
 ### Python Version Requirements
 
-- **Python 3.13+**: Recommended - Home Assistant 2025.x uses Python 3.13+ type parameter syntax
-- **Python 3.12**: Supported but may have some tooling compatibility issues (mypy)
-- **Python 3.11**: Minimum for older Home Assistant versions
+- **Python 3.14**: Required by Home Assistant 2026.3.4 and used by CI.
+- Older Python notes (3.11–3.13, Home Assistant 2025.x) apply to the pre-2026 releases only.
 
 ### Repository Information
 

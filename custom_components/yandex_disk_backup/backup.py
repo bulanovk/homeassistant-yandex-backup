@@ -55,8 +55,12 @@ from .const import (
     DATA_BACKUP_AGENT_LISTENERS,
     DEFAULT_BACKUP_FOLDER,
     DOMAIN,
+    RUNTIME_TOKEN_MANAGER,
     _LOGGER,
 )
+from .token_manager import TokenRefreshError
+from .paths import InvalidPathError, join_filename, resolve_base_path
+from .storage import FolderIsFileError, async_ensure_folder
 
 
 async def async_get_backup_agents(
@@ -129,17 +133,35 @@ class YandexDiskBackupAgent(BackupAgent):
         self._config = config
         self.unique_id = unique_id
         self._client: AsyncClient | None = None
-        self._backup_folder = config.get(CONF_BACKUP_FOLDER, DEFAULT_BACKUP_FOLDER)
+        self._client_token: str | None = None
+        self._backup_folder = resolve_base_path(config)
         self._disk_info_cache: tuple[dict[str, Any], datetime] | None = None
         self._cache_lock = asyncio.Lock()
 
+    async def _get_access_token(self) -> str:
+        """Return the current access token, refreshing it if needed.
+
+        Raises:
+            BackupAgentError: If the token cannot be used
+        """
+        manager = self._config.get(RUNTIME_TOKEN_MANAGER)
+        if manager is None:
+            return str(self._config[CONF_TOKEN])
+        try:
+            return str(await manager.async_get_access_token())
+        except TokenRefreshError as err:
+            raise BackupAgentError(
+                "Authentication failed. Please reconfigure."
+            ) from err
+
     async def _get_client(self) -> AsyncClient:
-        """Get or create yadisk async client.
+        """Get or create yadisk async client bound to the current token.
 
         Returns:
             AsyncClient instance configured with OAuth token
         """
-        if self._client is None:
+        token = await self._get_access_token()
+        if self._client is None or token != self._client_token:
 
             def _create_client() -> AsyncClient:
                 """Create AsyncClient - may block on SSL context initialization.
@@ -147,10 +169,14 @@ class YandexDiskBackupAgent(BackupAgent):
                 Returns:
                     The created AsyncClient instance
                 """
-                return AsyncClient(token=self._config[CONF_TOKEN])
+                return AsyncClient(token=token)
 
+            old_client = self._client
             # Run client creation in executor to avoid blocking SSL calls
             self._client = await self.hass.async_add_executor_job(_create_client)
+            self._client_token = token
+            if old_client is not None:
+                await old_client.close()
         return self._client
 
     async def async_download_backup(  # type: ignore[override,misc]
@@ -178,7 +204,7 @@ class YandexDiskBackupAgent(BackupAgent):
                 _LOGGER.error("Backup not found: %s", backup_id)
                 raise BackupAgentError(f"Backup {backup_id} not found")
 
-            remote_path = f"{self._backup_folder}/{filename}"
+            remote_path = join_filename(self._backup_folder, filename)
             client = await self._get_client()
             download_url = await client.get_download_link(remote_path)
             # Return the async generator directly (don't yield from this function)
@@ -264,7 +290,7 @@ class YandexDiskBackupAgent(BackupAgent):
         # Use descriptive filename based on backup name and date
         # This preserves the "Automatic" or "Custom" prefix in the filename
         filename = suggested_filename(backup)
-        remote_path = f"{self._backup_folder}/{filename}"
+        remote_path = join_filename(self._backup_folder, filename)
 
         try:
             # Get client once for reuse
@@ -390,7 +416,7 @@ class YandexDiskBackupAgent(BackupAgent):
             _LOGGER.warning("Backup not found for deletion: %s", backup_id)
             raise BackupAgentError(f"Backup {backup_id} not found")
 
-        remote_path = f"{self._backup_folder}/{filename}"
+        remote_path = join_filename(self._backup_folder, filename)
         metadata_path = self._get_metadata_path(remote_path)
 
         try:
@@ -485,7 +511,11 @@ class YandexDiskBackupAgent(BackupAgent):
                         item_count,
                     )
 
-                    backup_path = f"{self._backup_folder}/{item.name}"
+                    try:
+                        backup_path = join_filename(self._backup_folder, name)
+                    except InvalidPathError:
+                        _LOGGER.debug("Skipping invalid item name: %s", item.name)
+                        continue
 
                     # Try to load metadata from sidecar file first
                     metadata_dict = await self._load_metadata(client, backup_path)
@@ -582,7 +612,7 @@ class YandexDiskBackupAgent(BackupAgent):
         if filename is None:
             raise BackupAgentError(f"Backup {backup_id} not found")
 
-        remote_path = f"{self._backup_folder}/{filename}"
+        remote_path = join_filename(self._backup_folder, filename)
 
         try:
             client = await self._get_client()
@@ -711,18 +741,15 @@ class YandexDiskBackupAgent(BackupAgent):
         Raises:
             BackupAgentError: If folder creation fails
         """
+        client = await self._get_client()
         try:
-            client = await self._get_client()
-            await client.mkdir(self._backup_folder)
-            _LOGGER.debug("Created backup folder: %s", self._backup_folder)
+            await async_ensure_folder(client, self._backup_folder)
+        except FolderIsFileError as err:
+            _LOGGER.error("Backup folder path is a file: %s", err.path)
+            raise BackupAgentError("Backup folder path is occupied by a file") from err
         except YaDiskError as err:
-            # Folder might already exist, check if it's accessible
-            try:
-                client = await self._get_client()
-                await client.get_meta(self._backup_folder)
-            except YaDiskError:
-                _LOGGER.error("Failed to create backup folder: %s", err)
-                raise BackupAgentError("Cannot create backup folder") from err
+            _LOGGER.error("Failed to create backup folder: %s", err)
+            raise BackupAgentError("Cannot create backup folder") from err
 
     async def _resolve_filename(self, backup_id: str) -> str | None:
         """Resolve backup_id (HA UUID) to filename on Yandex Disk.
@@ -748,7 +775,11 @@ class YandexDiskBackupAgent(BackupAgent):
                     continue
 
                 # Load metadata from sidecar to check backup_id
-                backup_path = f"{self._backup_folder}/{name}"
+                try:
+                    backup_path = join_filename(self._backup_folder, name)
+                except InvalidPathError:
+                    _LOGGER.debug("Skipping invalid item name: %s", name)
+                    continue
                 metadata_dict = await self._load_metadata(client, backup_path)
                 if metadata_dict and metadata_dict.get("backup_id") == backup_id:
                     _LOGGER.debug(

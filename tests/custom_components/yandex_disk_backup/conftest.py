@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 # Use SelectorEventLoopPolicy on Windows to avoid ProactorEventLoop socket issues
 if sys.platform == "win32":
     from asyncio import WindowsSelectorEventLoopPolicy
+
     asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
 
@@ -19,11 +20,15 @@ def pytest_configure(config):
     """Configure pytest to use WindowsSelectorEventLoopPolicy on Windows."""
     if sys.platform == "win32":
         from asyncio import WindowsSelectorEventLoopPolicy
+
         asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+
 
 # Remove test directory from sys.path to prevent namespace conflicts
 test_dir = Path(__file__).parent
-sys.path = [p for p in sys.path if str(test_dir) not in p and str(test_dir.parent) not in p]
+sys.path = [
+    p for p in sys.path if str(test_dir) not in p and str(test_dir.parent) not in p
+]
 
 # Now load the installed yadisk first
 import yadisk
@@ -41,7 +46,10 @@ if "custom_components.yandex_disk_backup" not in sys.modules:
 
 # Load const.py first (no dependencies)
 const_path = project_root / "custom_components" / "yandex_disk_backup" / "const.py"
-if const_path.exists() and "custom_components.yandex_disk_backup.const" not in sys.modules:
+if (
+    const_path.exists()
+    and "custom_components.yandex_disk_backup.const" not in sys.modules
+):
     spec = importlib.util.spec_from_file_location(
         "custom_components.yandex_disk_backup.const", const_path
     )
@@ -49,9 +57,22 @@ if const_path.exists() and "custom_components.yandex_disk_backup.const" not in s
     sys.modules["custom_components.yandex_disk_backup.const"] = module
     spec.loader.exec_module(module)
 
+# Load helper modules (depend on const / each other) before backup.py
+for _name in ("paths", "storage", "oauth", "token_manager"):
+    _path = project_root / "custom_components" / "yandex_disk_backup" / f"{_name}.py"
+    _full = f"custom_components.yandex_disk_backup.{_name}"
+    if _path.exists() and _full not in sys.modules:
+        spec = importlib.util.spec_from_file_location(_full, _path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_full] = module
+        spec.loader.exec_module(module)
+
 # Load backup.py (depends on const)
 backup_path = project_root / "custom_components" / "yandex_disk_backup" / "backup.py"
-if backup_path.exists() and "custom_components.yandex_disk_backup.backup" not in sys.modules:
+if (
+    backup_path.exists()
+    and "custom_components.yandex_disk_backup.backup" not in sys.modules
+):
     spec = importlib.util.spec_from_file_location(
         "custom_components.yandex_disk_backup.backup", backup_path
     )
@@ -60,8 +81,13 @@ if backup_path.exists() and "custom_components.yandex_disk_backup.backup" not in
     spec.loader.exec_module(module)
 
 # Load config_flow.py (depends on const)
-config_flow_path = project_root / "custom_components" / "yandex_disk_backup" / "config_flow.py"
-if config_flow_path.exists() and "custom_components.yandex_disk_backup.config_flow" not in sys.modules:
+config_flow_path = (
+    project_root / "custom_components" / "yandex_disk_backup" / "config_flow.py"
+)
+if (
+    config_flow_path.exists()
+    and "custom_components.yandex_disk_backup.config_flow" not in sys.modules
+):
     spec = importlib.util.spec_from_file_location(
         "custom_components.yandex_disk_backup.config_flow", config_flow_path
     )
@@ -81,8 +107,13 @@ if init_path.exists():
     spec.loader.exec_module(parent_module)
 
 # Load diagnostics.py (depends on const)
-diagnostics_path = project_root / "custom_components" / "yandex_disk_backup" / "diagnostics.py"
-if diagnostics_path.exists() and "custom_components.yandex_disk_backup.diagnostics" not in sys.modules:
+diagnostics_path = (
+    project_root / "custom_components" / "yandex_disk_backup" / "diagnostics.py"
+)
+if (
+    diagnostics_path.exists()
+    and "custom_components.yandex_disk_backup.diagnostics" not in sys.modules
+):
     spec = importlib.util.spec_from_file_location(
         "custom_components.yandex_disk_backup.diagnostics", diagnostics_path
     )
@@ -114,18 +145,27 @@ def hass():
     mock_hass.data = {}
     mock_hass.config = Mock()
     mock_hass.config.path = Mock(return_value="/tmp/homeassistant")
-    
+
     # Mock bus and event system
     mock_hass.bus = Mock()
     mock_hass.bus.async_listen_once = AsyncMock(return_value=Mock())
-    
+
     # Mock config_entries with proper flow manager methods
     mock_hass.config_entries = Mock()
     mock_hass.config_entries.async_add = AsyncMock()
     mock_hass.config_entries.entries = []
     mock_hass.config_entries.flow = Mock()
-    mock_hass.config_entries.flow.async_init = AsyncMock(return_value={"type": "form", "flow_id": "test_flow", "step_id": "user"})
-    mock_hass.config_entries.flow.async_configure = AsyncMock(return_value={"type": "create_entry", "flow_id": "test_flow", "title": "Yandex Disk", "data": {"token": "valid_token_abc123", "backup_folder": "/backups"}})
+    mock_hass.config_entries.flow.async_init = AsyncMock(
+        return_value={"type": "form", "flow_id": "test_flow", "step_id": "user"}
+    )
+    mock_hass.config_entries.flow.async_configure = AsyncMock(
+        return_value={
+            "type": "create_entry",
+            "flow_id": "test_flow",
+            "title": "Yandex Disk",
+            "data": {"token": "valid_token_abc123", "backup_folder": "/backups"},
+        }
+    )
     mock_hass.config_entries.flow.async_progress_by_handler = Mock(return_value=[])
     mock_hass.config_entries.flow.async_progress = Mock(return_value=[])
     mock_hass.config_entries.async_unique_id = Mock()
@@ -135,6 +175,10 @@ def hass():
         return func(*args)
 
     mock_hass.async_add_executor_job = mock_add_executor_job
+    mock_hass.config_entries.async_update_entry = Mock()
+    mock_hass.async_create_task = (
+        lambda coro, *a, **kw: asyncio.get_running_loop().create_task(coro)
+    )
     return mock_hass
 
 
@@ -162,7 +206,7 @@ def mock_yadisk_client():
     # Setup default disk info mock
     disk_info = Mock()
     disk_info.total_space = 10 * 1024**3  # 10 GB
-    disk_info.used_space = 2 * 1024**3     # 2 GB (free_space calculated: 8 GB)
+    disk_info.used_space = 2 * 1024**3  # 2 GB (free_space calculated: 8 GB)
 
     async def get_disk_info_impl():
         return disk_info
@@ -200,7 +244,9 @@ def mock_yadisk_client():
 
     # Setup other methods
     client.upload = AsyncMock()
-    client.get_upload_link = AsyncMock(return_value="https://cloud-api.yandex.net/v1/disk/resources/upload?url=abc123")
+    client.get_upload_link = AsyncMock(
+        return_value="https://cloud-api.yandex.net/v1/disk/resources/upload?url=abc123"
+    )
     client.remove = AsyncMock()
     client.mkdir = AsyncMock()
 
@@ -248,7 +294,10 @@ def mock_http_session():
     mock_session.put = Mock(return_value=mock_response)
 
     # Mock async_get_clientsession to return our mock session
-    with patch("custom_components.yandex_disk_backup.backup.async_get_clientsession", return_value=mock_session):
+    with patch(
+        "custom_components.yandex_disk_backup.backup.async_get_clientsession",
+        return_value=mock_session,
+    ):
         yield mock_session
 
 
@@ -270,4 +319,5 @@ def backup_agent(
         # Cleanup
         if agent._client:
             import asyncio
+
             asyncio.run(agent.async_close())
