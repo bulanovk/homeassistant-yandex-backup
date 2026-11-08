@@ -16,8 +16,11 @@ from yadisk.exceptions import (
     YaDiskError,
 )
 
+from custom_components.yandex_disk_backup.backup import YandexDiskBackupAgent
 from custom_components.yandex_disk_backup.const import (
     CONF_BACKUP_FOLDER,
+    CONF_INSTANCE_FOLDER,
+    CONF_STORAGE_MODE,
     CONF_TOKEN,
     DEFAULT_BACKUP_FOLDER,
 )
@@ -28,7 +31,9 @@ BACKUP_FILENAME = "core.2026-01-08.tar"  # Actual filename on Yandex Disk
 
 
 @pytest.mark.asyncio
-async def test_upload_backup_success(backup_agent, mock_yadisk_client, mock_http_session):
+async def test_upload_backup_success(
+    backup_agent, mock_yadisk_client, mock_http_session
+):
     """Test successful backup upload using client.upload() with throttling bypass."""
     backup = AgentBackup(
         backup_id="core.2026-01-08.tar",
@@ -83,7 +88,9 @@ async def test_upload_backup_insufficient_storage(backup_agent, mock_yadisk_clie
     # Mock insufficient storage (10GB total - 9.5GB used = 0.5GB free, need 1GB)
     disk_info = Mock()
     disk_info.total_space = 10 * 1024**3
-    disk_info.used_space = int(9.5 * 1024**3)  # Only 0.5GB free (calculated), less than 1GB backup size
+    disk_info.used_space = int(
+        9.5 * 1024**3
+    )  # Only 0.5GB free (calculated), less than 1GB backup size
 
     async def mock_get_disk_info():
         return disk_info
@@ -126,12 +133,12 @@ async def test_upload_backup_insufficient_storage(backup_agent, mock_yadisk_clie
 
 
 @pytest.mark.asyncio
-async def test_download_backup_success(backup_agent, mock_yadisk_client, mock_http_session):
+async def test_download_backup_success(
+    backup_agent, mock_yadisk_client, mock_http_session
+):
     """Test successful backup download."""
     # Mock _resolve_filename to map HA backup_id to actual filename
-    with patch.object(
-        backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME
-    ):
+    with patch.object(backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME):
         # Create async iterator for chunks
         async def chunk_iterator():
             yield b"chunk1"
@@ -196,7 +203,9 @@ async def test_delete_backup_not_found(backup_agent, mock_yadisk_client):
 
 
 @pytest.mark.asyncio
-async def test_list_backups_success(backup_agent, mock_yadisk_client, mock_backup_metadata):
+async def test_list_backups_success(
+    backup_agent, mock_yadisk_client, mock_backup_metadata
+):
     """Test successful backup listing with HA backup_id from metadata."""
     # Mock _load_metadata to return HA backup_id
     with patch.object(
@@ -265,6 +274,7 @@ async def test_list_backups_filters_non_backup_files(backup_agent, mock_yadisk_c
 @pytest.mark.asyncio
 async def test_list_backups_creates_folder_if_missing(backup_agent, mock_yadisk_client):
     """Test that listing creates folder if it doesn't exist."""
+
     # Create async generator that raises NotFoundError
     async def listdir_not_found(path):
         raise NotFoundError("Folder not found")
@@ -280,16 +290,14 @@ async def test_list_backups_creates_folder_if_missing(backup_agent, mock_yadisk_
 
 
 @pytest.mark.asyncio
-async def test_get_backup_found(
-    backup_agent, mock_yadisk_client, mock_backup_metadata
-):
+async def test_get_backup_found(backup_agent, mock_yadisk_client, mock_backup_metadata):
     """Test getting backup that exists."""
     filename = "backup.tar"
     # Mock _resolve_filename to map HA backup_id to actual filename
     # Mock _load_metadata to return HA backup_id
-    with patch.object(backup_agent, "_resolve_filename", return_value=filename), patch.object(
-        backup_agent, "_load_metadata", return_value=mock_backup_metadata
-    ):
+    with patch.object(
+        backup_agent, "_resolve_filename", return_value=filename
+    ), patch.object(backup_agent, "_load_metadata", return_value=mock_backup_metadata):
         backup = await backup_agent.async_get_backup(HA_BACKUP_ID)
 
         assert backup is not None
@@ -332,6 +340,7 @@ async def test_disk_info_caching(backup_agent, mock_yadisk_client):
 @pytest.mark.asyncio
 async def test_yadisk_error_handling(backup_agent, mock_yadisk_client):
     """Test that yadisk errors are properly handled."""
+
     # Create async generator that raises YaDiskError
     async def listdir_error(path):
         raise YaDiskError("API Error")
@@ -430,7 +439,9 @@ async def test_list_backups_includes_hash_style_ids(backup_agent, mock_yadisk_cl
 
 
 @pytest.mark.asyncio
-async def test_resolve_filename_success(backup_agent, mock_yadisk_client, mock_backup_metadata):
+async def test_resolve_filename_success(
+    backup_agent, mock_yadisk_client, mock_backup_metadata
+):
     """Test successful filename resolution from HA backup_id."""
     # Mock listdir with a backup file
     list_item = Mock()
@@ -454,6 +465,7 @@ async def test_resolve_filename_success(backup_agent, mock_yadisk_client, mock_b
 @pytest.mark.asyncio
 async def test_resolve_filename_not_found(backup_agent, mock_yadisk_client):
     """Test filename resolution when backup not found."""
+
     # Mock empty listdir
     async def listdir_impl(path):
         return
@@ -586,10 +598,10 @@ async def test_download_backup_connection_error(backup_agent, mock_yadisk_client
     """Test download with connection error."""
     from yadisk.exceptions import YaDiskConnectionError
 
-    with patch.object(
-        backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME
-    ):
-        mock_yadisk_client.get_download_link.side_effect = YaDiskConnectionError("Network error")
+    with patch.object(backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME):
+        mock_yadisk_client.get_download_link.side_effect = YaDiskConnectionError(
+            "Network error"
+        )
 
         with pytest.raises(BackupAgentUnreachableError):
             await backup_agent.async_download_backup(HA_BACKUP_ID)
@@ -602,9 +614,7 @@ async def test_delete_backup_unauthorized_error(backup_agent, mock_yadisk_client
 
     mock_yadisk_client.remove.side_effect = UnauthorizedError("Invalid token")
 
-    with patch.object(
-        backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME
-    ):
+    with patch.object(backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME):
         with pytest.raises(BackupAgentUnreachableError):
             await backup_agent.async_delete_backup(HA_BACKUP_ID)
 
@@ -616,9 +626,7 @@ async def test_delete_backup_connection_error(backup_agent, mock_yadisk_client):
 
     mock_yadisk_client.remove.side_effect = YaDiskConnectionError("Network error")
 
-    with patch.object(
-        backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME
-    ):
+    with patch.object(backup_agent, "_resolve_filename", return_value=BACKUP_FILENAME):
         with pytest.raises(BackupAgentUnreachableError):
             await backup_agent.async_delete_backup(HA_BACKUP_ID)
 
@@ -637,12 +645,15 @@ async def test_ensure_backup_folder_creates_folder(backup_agent, mock_yadisk_cli
 @pytest.mark.asyncio
 async def test_ensure_backup_folder_already_exists(backup_agent, mock_yadisk_client):
     """Test that _ensure_backup_folder handles existing folder."""
-    from yadisk.exceptions import YaDiskError
+    from yadisk.exceptions import PathExistsError
 
     # Mock mkdir to raise error (folder already exists)
-    mock_yadisk_client.mkdir.side_effect = YaDiskError("Folder exists")
-    # Mock get_meta to succeed (folder exists and is accessible)
-    mock_yadisk_client.get_meta.return_value = Mock()
+    mock_yadisk_client.mkdir.side_effect = PathExistsError("Folder exists")
+    # Mock get_meta to report a directory
+    meta = Mock()
+    meta.type = "dir"
+    mock_yadisk_client.get_meta.side_effect = None
+    mock_yadisk_client.get_meta.return_value = meta
 
     await backup_agent._ensure_backup_folder()
 
@@ -690,7 +701,9 @@ async def test_upload_metadata_success(backup_agent, mock_yadisk_client):
 
 
 @pytest.mark.asyncio
-async def test_load_metadata_success(backup_agent, mock_yadisk_client, mock_http_session):
+async def test_load_metadata_success(
+    backup_agent, mock_yadisk_client, mock_http_session
+):
     """Test successful metadata loading."""
     import json
 
@@ -700,7 +713,9 @@ async def test_load_metadata_success(backup_agent, mock_yadisk_client, mock_http
         "size": 1024,
     }
 
-    mock_yadisk_client.get_download_link.return_value = "http://example.com/metadata.json"
+    mock_yadisk_client.get_download_link.return_value = (
+        "http://example.com/metadata.json"
+    )
 
     # Mock HTTP response
     mock_response = mock_http_session.get.return_value
@@ -752,9 +767,7 @@ async def test_get_backup_fallback_to_file_metadata(backup_agent, mock_yadisk_cl
 
     filename = "backup.tar"
 
-    with patch.object(
-        backup_agent, "_resolve_filename", return_value=filename
-    ):
+    with patch.object(backup_agent, "_resolve_filename", return_value=filename):
         # Mock _load_metadata to return None (no sidecar)
         with patch.object(backup_agent, "_load_metadata", return_value=None):
             # Mock get_meta for file metadata fallback
@@ -887,7 +900,11 @@ async def test_upload_backup_with_suggested_filename(backup_agent, mock_yadisk_c
     first_call_args = mock_yadisk_client.upload.call_args_list[0][0]
     uploaded_path = first_call_args[1]
     # The filename should be based on the backup name
-    assert "2025.12.0" in uploaded_path or "Automatic" in uploaded_path or "backup" in uploaded_path
+    assert (
+        "2025.12.0" in uploaded_path
+        or "Automatic" in uploaded_path
+        or "backup" in uploaded_path
+    )
 
 
 @pytest.mark.asyncio
@@ -933,3 +950,172 @@ async def test_disk_info_cache_expiration(backup_agent, mock_yadisk_client):
 
     # Should have called get_disk_info twice (cache expired)
     assert mock_yadisk_client.get_disk_info.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# App-folder storage: all paths must stay under the instance folder
+# ---------------------------------------------------------------------------
+
+
+def _app_agent(hass, client, folder, unique_id="uid:app_folder:" + "home"):
+    config = {
+        CONF_TOKEN: "t",
+        CONF_STORAGE_MODE: "app_folder",
+        CONF_INSTANCE_FOLDER: folder,
+    }
+    agent = YandexDiskBackupAgent(hass, config, unique_id)
+    agent._client = client
+    agent._client_token = "t"
+    return agent
+
+
+@pytest.fixture
+def app_agent(hass, mock_yadisk_client):
+    return _app_agent(hass, mock_yadisk_client, "home")
+
+
+def test_app_agent_base_path(app_agent):
+    assert app_agent._backup_folder == "app:/home"
+
+
+def test_app_agent_invalid_folder_rejected(hass, mock_yadisk_client):
+    from custom_components.yandex_disk_backup.paths import InvalidPathError
+
+    with pytest.raises(InvalidPathError):
+        _app_agent(hass, mock_yadisk_client, "../x")
+
+
+@pytest.mark.asyncio
+async def test_app_list_uses_instance_folder(app_agent, mock_yadisk_client):
+    seen = []
+
+    async def listdir(path):
+        seen.append(path)
+        return
+        yield  # pragma: no cover
+
+    mock_yadisk_client.listdir = listdir
+    await app_agent.async_list_backups()
+    assert seen == ["app:/home"]
+
+
+@pytest.mark.asyncio
+async def test_app_delete_paths(app_agent, mock_yadisk_client):
+    with patch.object(app_agent, "_resolve_filename", return_value="x.tar"):
+        await app_agent.async_delete_backup(HA_BACKUP_ID)
+    paths = [c.args[0] for c in mock_yadisk_client.remove.await_args_list]
+    assert paths and all(p.startswith("app:/home/") for p in paths)
+    assert all(
+        c.kwargs.get("permanently") is False
+        for c in mock_yadisk_client.remove.await_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_app_ensure_folder_file_in_the_way(app_agent, mock_yadisk_client):
+    from yadisk.exceptions import PathExistsError
+
+    mock_yadisk_client.mkdir.side_effect = PathExistsError("exists")
+    meta = Mock()
+    meta.type = "file"
+    mock_yadisk_client.get_meta.side_effect = None
+    mock_yadisk_client.get_meta.return_value = meta
+
+    with pytest.raises(BackupAgentError, match="occupied by a file"):
+        await app_agent._ensure_backup_folder()
+
+
+@pytest.mark.asyncio
+async def test_two_app_agents_list_only_own_folder(hass, mock_yadisk_client):
+    """Instances with different folders never see each other's backups."""
+    contents = {
+        "app:/home": ["x.tar"],
+        "app:/testing": ["x.tar"],
+    }
+
+    def make_listdir():
+        async def listdir(path):
+            assert path in contents
+            for name in contents[path]:
+                item = Mock()
+                item.name = name
+                item.type = "file"
+                item.created = datetime.now()
+                yield item
+
+        return listdir
+
+    mock_yadisk_client.listdir = make_listdir()
+    home = _app_agent(hass, mock_yadisk_client, "home")
+    testing = _app_agent(hass, mock_yadisk_client, "testing")
+
+    listed_paths: list[str] = []
+    original = mock_yadisk_client.listdir
+
+    async def spy(path):
+        listed_paths.append(path)
+        async for item in original(path):
+            yield item
+
+    mock_yadisk_client.listdir = spy
+    await home.async_list_backups()
+    await testing.async_list_backups()
+
+    assert listed_paths == ["app:/home", "app:/testing"]
+
+
+class _FakeManager:
+    def __init__(self, tokens):
+        self.tokens = list(tokens)
+
+    async def async_get_access_token(self):
+        value = self.tokens.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+
+@pytest.mark.asyncio
+async def test_client_recreated_when_token_changes(hass):
+    from custom_components.yandex_disk_backup.const import RUNTIME_TOKEN_MANAGER
+
+    first, second = AsyncMock(), AsyncMock()
+    manager = _FakeManager(["A", "B"])
+    config = {
+        CONF_TOKEN: "A",
+        CONF_STORAGE_MODE: "app_folder",
+        CONF_INSTANCE_FOLDER: "home",
+        RUNTIME_TOKEN_MANAGER: manager,
+    }
+    agent = YandexDiskBackupAgent(hass, config, "uid")
+    created = []
+
+    def fake_client(token):
+        created.append(token)
+        return first if token == "A" else second
+
+    with patch(
+        "custom_components.yandex_disk_backup.backup.AsyncClient",
+        side_effect=fake_client,
+    ):
+        assert await agent._get_client() is first
+        assert await agent._get_client() is second
+
+    assert created == ["A", "B"]
+    first.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_error_becomes_backup_agent_error(hass, mock_yadisk_client):
+    from custom_components.yandex_disk_backup.const import RUNTIME_TOKEN_MANAGER
+    from custom_components.yandex_disk_backup.token_manager import TokenRefreshError
+
+    config = {
+        CONF_TOKEN: "A",
+        CONF_STORAGE_MODE: "app_folder",
+        CONF_INSTANCE_FOLDER: "home",
+        RUNTIME_TOKEN_MANAGER: _FakeManager([TokenRefreshError("invalid_grant")]),
+    }
+    agent = YandexDiskBackupAgent(hass, config, "uid")
+    with pytest.raises(BackupAgentError, match="Authentication failed"):
+        await agent.async_list_backups()
