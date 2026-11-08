@@ -43,8 +43,6 @@ A Home Assistant custom integration that provides Yandex Disk as a backup storag
 
 ## Configuration
 
-> **Status:** sign-in to Yandex for app-folder storage and token refresh without a client secret were tested manually on a real Yandex account.
-
 ### Storage modes and permissions
 
 Choose a storage mode when adding the integration. Each mode asks Yandex only for the permissions it needs:
@@ -58,7 +56,9 @@ In app-folder mode the integration can only reach its own application folder. It
 
 > **Security:** Keep tokens private and never include them in issues, logs, or screenshots. Consider a separate Yandex account for backups.
 
-### Creating an OAuth application for disk-folder mode
+### Creating an OAuth application for disk-folder mode (legacy)
+
+Disk-folder mode is legacy. Use app-folder mode for new setups. Only create an application if you must keep full disk access.
 
 App-folder mode signs in with the built-in application, so you do not need to create one for it. Disk-folder (legacy) mode needs a token with full disk access, which the built-in application cannot grant, so create an application of your own and use its ClientID to obtain the token:
 
@@ -178,85 +178,13 @@ If these steps do not help, report the following in an issue:
 
 **Remove OAuth tokens and other sensitive information from logs and screenshots before sharing them.**
 
-## Architecture
-
-```
-Home Assistant Core
-    ├── Config flow: storage mode, PKCE sign-in or manual token, folder
-    │   └── YandexOAuthClient (token refresh) → TokenManager (refreshes < 30 days before expiry, saves to the entry)
-    └── Backup Platform
-        └── YandexDiskBackupAgent
-            ├── Access token from TokenManager (new yadisk.AsyncClient when it changes)
-            ├── yadisk.AsyncClient (API operations)
-            ├── HA HTTP Session (upload/download streaming)
-            ├── Disk Info Cache (5-minute TTL)
-            └── Storage path: app:/<instance folder> or the legacy backup folder
-                └── Yandex Disk API
-```
-
-### Key Implementation Details
-
-- **Upload**: Uses `client.upload()` with User-Agent spoofing to bypass 128 KiB/s throttling
-- **Download**: Streams via HA's HTTP session in 4MB chunks
-- **Client Creation**: Wrapped in executor to avoid SSL context blocking
-- **Backup Filtering**: Only `.tar` and `.tar.gz` files are listed as backups
-- **Metadata Storage**: Each backup has a corresponding `.metadata.json` sidecar file containing full backup metadata
-- **Descriptive Filenames**: Backups use `suggested_filename()` format like "Automatic backup 2025.12.0 2026-01-11_17.16_57961500.tar"
-- **Backward Compatibility**: Old backups without sidecar files are still supported with fallback metadata
-
-## Development
-
-### Requirements
-
-- Python 3.14.2+ (required by Home Assistant 2026.3)
-- Virtual environment required
-
-### Running Tests
-
-```bash
-# Create and activate virtual environment
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/Mac:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements_test.txt
-
-# Run tests
-pytest tests/custom_components/yandex_disk_backup/
-```
-
-**Note for Windows users**: Tests require Unix-only modules (`fcntl`, `resource`). The test suite includes mocks for these modules in `tests/conftest.py` to enable running tests on Windows.
-
-### Code Quality
-
-```bash
-# Format code
-black custom_components/yandex_disk_backup/
-
-# Type checking
-mypy custom_components/yandex_disk_backup/
-
-# Linting
-pylint custom_components/yandex_disk_backup/ --errors-only
-```
-
 ## Dependencies
 
 - `yadisk>=3.4.0` - Official Python client for Yandex Disk API
 
 ## Contributing
 
-Contributions are welcome! This integration follows Home Assistant custom component best practices:
-- Async-first design
-- Config Entry based configuration
-- Comprehensive error handling
-- Full test coverage
-- Proper logging and diagnostics
-
-Please submit pull requests to the GitHub repository.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, development setup, tests, and code quality checks.
 
 ## License
 
