@@ -28,7 +28,6 @@
 ## Design and Plans
 
 - Current design: `docs/superpowers/specs/2026-11-05-app-folder-multi-instance-design.md` (app-folder storage, PKCE sign-in, manual token for disk folder, migration plan, release gates).
-- The original 2025 implementation plan is a local file (`C:\Users\bulan\.claude\plans\humble-crunching-dahl.md`). It is historical and not kept in the repository.
 
 ## File Structure
 
